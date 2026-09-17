@@ -4,7 +4,7 @@ module SpectrumBase
 export AbstractSpectrum, Spectrum, spectrum, spectral_axis, flux_axis
 
 # AbstractSpectrum types
-export SingleSpectrum, IFUSpectrum, EchelleSpectrum
+export SingleSpectrum, IFUSpectrum, EchelleSpectrum, BinnedSpectrum
 
 # Transforms
 export SpectrumResampler, redden, redden!, deredden, deredden!
@@ -54,9 +54,7 @@ mutable struct Spectrum{S<:Number, F<:Number, M, N, A<:AbstractArray{S, M}, B<:A
             - SingleSpectrum: spectral axis (M-length vector), flux axis (M-length vector)
             - EchelleSpectrum: spectral axis (M x N matrix), flux axis (M x N matrix)
             - IFUSpectrum: spectral axis (M-length vector), flux axis (M x N x K matrix)
-            - TODO: BinnedSpectrum (final name(s) tbd):
-                - energy (M × 2 matrix), flux (N-length vector)
-                - others?
+            - BinnedSpectrum: spectral axis (M x 2 matrix of bin edges), flux axis (M-length vector)
 
             See the documentation for each spectrum type for more.
             """))
@@ -66,6 +64,19 @@ mutable struct Spectrum{S<:Number, F<:Number, M, N, A<:AbstractArray{S, M}, B<:A
         spec_ax = eachcol(s)
         if !(all(issorted, spec_ax) || all(x -> issorted(x; rev = true), spec_ax))
             throw(ArgumentError("Spectral axis must be strictly increasing or decreasing."))
+        end
+
+        # BinnedSpectrum invariants: m × 2 bin edges, each row strictly ordered in the axis direction
+        if M == 2 && N == 1
+            if size(s, 2) != 2
+                throw(ArgumentError("BinnedSpectrum spectral axis must be an m × 2 matrix of bin edges; got size $(size(s))"))
+            end
+            rows = eachrow(s)
+            ordered = all(issorted, spec_ax) ? all(r -> first(r) < last(r), rows) :
+                all(r -> first(r) > last(r), rows)
+            if !ordered
+                throw(ArgumentError("BinnedSpectrum bin edges must be strictly ordered within each row, in the direction of the spectral axis."))
+            end
         end
 
         return new{S, F, M, N, A, B}(s, f, meta)
@@ -208,9 +219,9 @@ Unitful.unit(spec::AbstractSpectrum) = unit(eltype(spectral_axis(spec))), unit(e
 
 # Spectrum types and basic arithmetic
 include("spectrum_single.jl")
+include("spectrum_binned.jl")
 include("spectrum_echelle.jl")
 include("spectrum_ifu.jl")
-#include("spectrum_binned.jl")
 
 """
     spectrum(spectral_axis, flux_axis, [meta])
@@ -290,13 +301,25 @@ function spectrum(spectral_axis::AbstractMatrix{<:Real}, flux_axis::AbstractMatr
     Spectrum(spectral_axis, flux_axis, Dict{Symbol,Any}(kwds))
 end
 
+function spectrum(spectral_axis::AbstractMatrix{<:Real}, flux_axis::AbstractVector{<:Real}; kwds...)
+    Spectrum(spectral_axis, flux_axis, Dict{Symbol,Any}(kwds))
+end
+
+# Recognized spectral-axis dimensions: wavelength, frequency, photon energy.
+const SPECTRAL_DIMENSIONS = (u"𝐋", u"𝐓^-1", u"𝐋^2 * 𝐌 * 𝐓^-2")
+
 function spectrum(spectral_axis::AbstractVector{<:Unitful.Quantity}, flux_axis::AbstractVector{<:Unitful.Quantity}; kwds...)
-    @assert dimension(eltype(spectral_axis)) ∈ (u"𝐋", u"𝐋^2 * 𝐌 * 𝐓^-2") "spectral_axis not recognized as having dimensions of wavelength or energy."
+    @assert dimension(eltype(spectral_axis)) ∈ SPECTRAL_DIMENSIONS "spectral_axis not recognized as having dimensions of wavelength, frequency, or energy."
     Spectrum(spectral_axis, flux_axis, Dict{Symbol,Any}(kwds))
 end
 
 function spectrum(spectral_axis::AbstractMatrix{<:Unitful.Quantity}, flux_axis::AbstractMatrix{<:Unitful.Quantity}; kwds...)
-    @assert dimension(eltype(spectral_axis)) ∈ (u"𝐋", u"𝐋^2 * 𝐌 * 𝐓^-2") "spectral_axis not recognized as having dimensions of wavelength or energy."
+    @assert dimension(eltype(spectral_axis)) ∈ SPECTRAL_DIMENSIONS "spectral_axis not recognized as having dimensions of wavelength, frequency, or energy."
+    Spectrum(spectral_axis, flux_axis, Dict{Symbol,Any}(kwds))
+end
+
+function spectrum(spectral_axis::AbstractMatrix{<:Unitful.Quantity}, flux_axis::AbstractVector{<:Unitful.Quantity}; kwds...)
+    @assert dimension(eltype(spectral_axis)) ∈ SPECTRAL_DIMENSIONS "spectral_axis not recognized as having dimensions of wavelength, frequency, or energy."
     Spectrum(spectral_axis, flux_axis, Dict{Symbol,Any}(kwds))
 end
 

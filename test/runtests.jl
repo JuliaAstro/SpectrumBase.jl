@@ -4,7 +4,7 @@ import SpectrumBase
 const init_code = quote
     using SpectrumBase: SpectrumBase, AbstractSpectrum, spectrum, spectral_axis, flux_axis
     using Measurements: Measurements, ±
-    using Unitful: @u_str, unit, ustrip
+    using Unitful: @u_str, uconvert, unit, ustrip
     using UnitfulAstro
     import Random
 

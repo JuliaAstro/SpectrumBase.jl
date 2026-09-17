@@ -1,5 +1,6 @@
 include("redden.jl")
 include("redshift.jl")
+include("spectral_axis.jl")
 
 # ## Broadening ops
 # include("kernels.jl")

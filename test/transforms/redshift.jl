@@ -1,4 +1,5 @@
 using SpectrumBase:
+    BinnedSpectrum,
     redshift,
     redshift!,
     doppler_shift,
@@ -80,6 +81,36 @@ end
         axis = collect(range(1.0, 5.0, length = 10)) * u"s"
         spec = SpectrumBase.Spectrum(axis, ones(10) * u"erg/s/cm^2/angstrom", Dict{Symbol, Any}())
         @test_throws ArgumentError redshift(spec, 0.5)
+    end
+
+    @testset "Unphysical redshift rejected" begin
+        spec = mock_spectrum_redshift()
+        @test_throws DomainError redshift(spec, -1.0) # Exactly z = -1
+        @test_throws DomainError redshift(spec, -1.5)
+        @test_throws DomainError redshift!(spec, -1.0)
+        # Blueshifts above the bound remain valid
+        @test redshift(spec, -0.5) isa typeof(spec)
+    end
+
+    @testset "Binned spectra" begin
+        edges = [1.0 2.0; 2.0 3.0; 3.0 4.0]
+        flux = [10.0, 20.0, 30.0]
+        binned = spectrum(edges, flux)
+
+        shifted = @inferred redshift(binned, 0.5)
+        @test shifted isa BinnedSpectrum
+        @test spectral_axis(shifted) ≈ edges .* 1.5
+        @test flux_axis(shifted) == flux
+        @test spectral_axis(binned) == edges
+
+        @test redshift!(binned, 0.5) === binned
+        @test spectral_axis(binned) ≈ edges .* 1.5
+
+        # Energy axis compresses
+        kev = spectrum(edges * u"keV", flux * u"Jy")
+        @test spectral_axis(@inferred redshift(kev, 0.5)) ≈ edges * u"keV" ./ 1.5
+        @test spectral_axis(doppler_shift(kev, 1000.0)) ≈ edges * u"keV" ./ (1 + 1000 / C_KMPS)
+        @test flux_axis(redshift(kev, 0.5)) == flux_axis(kev)
     end
 end
 

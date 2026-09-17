@@ -1,4 +1,4 @@
-using SpectrumBase: SingleSpectrum, EchelleSpectrum, IFUSpectrum
+using SpectrumBase: SingleSpectrum, BinnedSpectrum, EchelleSpectrum, IFUSpectrum
 
 const RNG = Random.seed!(8675309)
 
@@ -20,6 +20,9 @@ const RNG = Random.seed!(8675309)
     wave[3] = 10
     @test_throws ArgumentError spectrum(wave, flux)
     @test_throws ArgumentError spectrum(wave[begin:end-1], flux)
+
+    wave, flux = [1 2; 2 3; 3 4; 4 5; 5 6], 1:5
+    @test spectrum(wave, flux) isa BinnedSpectrum
 end
 
 @testset "Spectrum - Single" begin
@@ -60,6 +63,51 @@ end
       meta: Dict{Symbol, Any}(:name => "test spectrum")"""
     @test sprint(show, spec) == expected
     @test spec.name == "test spectrum"
+end
+
+@testset "Spectrum - Binned" begin
+    wave = [1.0 2.0; 2.0 3.0; 3.0 4.0; 4.0 5.0]
+    flux = [10.0, 20.0, 30.0, 40.0]
+
+    spec = spectrum(wave, flux, name = "test binned spectrum")
+    spec_i = spec[2]
+    spec_I = spec[2:3]
+
+    @test spec isa BinnedSpectrum
+    @test spec_i isa BinnedSpectrum
+    @test spec_I isa BinnedSpectrum
+    @test spectral_axis(spec_i) == [2.0 3.0]
+    @test flux_axis(spec_i) == [20.0]
+    @test spectral_axis(spec_I) == [2.0 3.0; 3.0 4.0]
+    @test flux_axis(spec_I) == [20.0, 30.0]
+    @test firstindex(spec) == 1
+    @test lastindex(spec) == 4
+    @test spec[firstindex(spec)] == spec[1]
+    @test spec[lastindex(spec)] == spec[4]
+
+    # Any integer index selects a single bin
+    @test spec[Int32(2)] == spec[2] == spec[2:2]
+
+    # m × 2 shape and row-order invariants
+    @test_throws ArgumentError spectrum([1.0 2.0 3.0; 2.0 3.0 4.0], [1.0, 2.0]) # not two columns
+    @test_throws ArgumentError spectrum(reshape([1.0, 2.0], 2, 1), [1.0, 2.0]) # not two columns
+    @test_throws ArgumentError spectrum([2.0 1.0; 3.0 2.0], [1.0, 2.0]) # edges swapped within rows
+    @test_throws ArgumentError spectrum([1.0 2.0; 3.0 2.5], [1.0, 2.0]) # inconsistent row order
+    @test_throws ArgumentError spectrum([1.0 1.0; 2.0 2.0], [1.0, 2.0]) # zero-width bins
+    @test spectrum([4.0 3.0; 3.0 2.0], [1.0, 2.0]) isa BinnedSpectrum # descending edges are valid
+
+    # Empty selections construct and display
+    empty_spec = spec[falses(4)]
+    @test length(empty_spec) == 0
+    @test occursin("empty", sprint(show, empty_spec))
+
+    expected = """
+    BinnedSpectrum(Float64, Float64)
+      spectral axis (4, 2): 1.0 .. 5.0
+      flux axis (4,): 10.0 .. 40.0
+      meta: Dict{Symbol, Any}(:name => "test binned spectrum")"""
+    @test sprint(show, spec) == expected
+    @test spec.name == "test binned spectrum"
 end
 
 @testset "Spectrum - Echelle" begin
@@ -320,4 +368,19 @@ end
         @test spectral_axis(s) == spectral_axis(spec)
         @test flux_axis(s) ≈ flux_axis(spec) ./ 10
     end
+end
+
+@testset "Unitful Spectrum - Binned" begin
+    edges = [1.0 2.0; 2.0 3.0; 3.0 4.0]u"keV"
+    flux = [1.0, 2.0, 3.0]u"Jy"
+
+    spec = spectrum(edges, flux, name = "test xray spectrum")
+
+    @test spec isa BinnedSpectrum
+    @test unit(spec) == (u"keV", u"Jy")
+    @test spectral_axis(spec) == edges
+    @test flux_axis(spec) == flux
+    @test spec.name == "test xray spectrum"
+
+    @test_throws AssertionError spectrum([1.0 2.0; 2.0 3.0]u"kg", flux)
 end

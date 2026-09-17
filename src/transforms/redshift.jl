@@ -11,12 +11,19 @@ function _doppler_factor(v; relativistic)
     return sqrt((1 + β) / (1 - β))
 end
 
+# Cosmological redshift
+function _redshift_factor(z)
+    z > -1 || throw(DomainError(z, "Cosmological redshift requires z > -1."))
+    return 1 + z
+end
+
 # Resolve the (1 + z) stretch factor to the scalar actually multiplied onto a spectral axis of element type `S`.
 _spectral_axis_factor(::Type{<:Real}, factor) = factor # Unitless: assume wavelength
 _spectral_axis_factor(::Type{<:Unitful.Length}, factor) = factor # Wavelength: stretches
+_spectral_axis_factor(::Type{<:Unitful.Frequency}, factor) = inv(factor) # Frequency: compresses
 _spectral_axis_factor(::Type{<:Unitful.Energy}, factor) = inv(factor) # Energy: compresses
 _spectral_axis_factor(::Type{S}, factor) where {S <: Unitful.Quantity} =
-    throw(ArgumentError("cannot shift a spectral axis with dimension $(dimension(S)); expected a wavelength or energy"))
+    throw(ArgumentError("cannot shift a spectral axis with dimension $(dimension(S)); expected a wavelength, frequency, or energy"))
 _spectral_axis_factor(spec::AbstractSpectrum, factor) = _spectral_axis_factor(eltype(spectral_axis(spec)), factor)
 
 # Rebuilding through the constructor lets the element type promote and re-runs the invariant checks.
@@ -35,7 +42,7 @@ Reassigns the spectral axis, so its element and array type cannot change.
 Use [`redshift`](@ref) for spectra with an integer spectral axis.
 """
 function redshift!(spec::AbstractSpectrum, z::Real)
-    spec.spectral_axis = spectral_axis(spec) .* _spectral_axis_factor(spec, 1 + z)
+    spec.spectral_axis = spectral_axis(spec) .* _spectral_axis_factor(spec, _redshift_factor(z))
     return spec
 end
 
@@ -52,6 +59,7 @@ The observed wavelength is related to the rest-frame wavelength by:
 
 where ``z`` is the cosmological redshift parameter. Only the spectral axis is transformed.
 Flux density values are not corrected for the stretching of the wavelength bins.
+For a [`BinnedSpectrum`](@ref), both bin edges are shifted and the bin values are carried unchanged.
 
 A wavelength axis is stretched by ``1 + z``. An energy axis (distinguished by its `Unitful` dimension)
 is compressed by the same factor. A unitless axis is assumed to be a wavelength.
@@ -59,7 +67,7 @@ is compressed by the same factor. A unitless axis is assumed to be a wavelength.
 # Arguments
 
 - `spec`: The input spectrum.
-- `z`: Redshift parameter. Positive values redshift (longer wavelengths),
+- `z`: Redshift parameter, must satisfy `z > -1`. Positive values redshift (longer wavelengths),
   negative values blueshift (shorter wavelengths).
 
 # Examples
@@ -75,7 +83,7 @@ true
 
 See also [`doppler_shift`](@ref) for velocity-based Doppler shifting.
 """
-redshift(spec::AbstractSpectrum, z::Real) = _scale_spectral_axis(spec, 1 + z)
+redshift(spec::AbstractSpectrum, z::Real) = _scale_spectral_axis(spec, _redshift_factor(z))
 
 """
     doppler_shift!(spec::AbstractSpectrum, v; relativistic=false)
@@ -108,6 +116,7 @@ Apply a Doppler shift to a spectrum, returning a new spectrum with shifted wavel
 ```
 
 Only the spectral axis is transformed; flux density values are preserved as-is.
+For a [`BinnedSpectrum`](@ref), both bin edges are shifted and the bin values are carried unchanged.
 
 # Arguments
 

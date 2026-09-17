@@ -43,7 +43,7 @@ julia> spectral_axis(shifted) ≈ spectral_axis(spec) .* 1.5
 true
 ```
 
-**Doppler shift** shifts by a radial velocity `v`. Pass a `Unitful` velocity or a plain number (interpreted as m/s). Set `relativistic=true` for the full relativistic formula:
+**Doppler shift** shifts by a radial velocity `v`. Pass a `Unitful` velocity or a plain number (interpreted as km/s). Set `relativistic=true` for the full relativistic formula:
 
 ```jldoctest
 julia> using SpectrumBase, Unitful
@@ -57,6 +57,22 @@ julia> shifted_rel = doppler_shift(spec, 100u"km/s"; relativistic=true);
 
 Both `redshift` and `doppler_shift` return a new spectrum. In-place variants `redshift!` and `doppler_shift!` are also available.
 
+Binned spectra are supported as well: both bin edges are shifted and the bin values are carried unchanged. An energy axis is compressed rather than stretched:
+
+```jldoctest
+julia> using SpectrumBase, Unitful
+
+julia> spec = spectrum([1.0 2.0; 2.0 3.0; 3.0 4.0]u"keV", [10.0, 20.0, 30.0]u"erg/s/cm^2");
+
+julia> shifted = redshift(spec, 0.5);
+
+julia> spectral_axis(shifted) ≈ spectral_axis(spec) ./ 1.5
+true
+
+julia> flux_axis(shifted) == flux_axis(spec)
+true
+```
+
 ### API/Reference
 
 ```@docs
@@ -64,6 +80,32 @@ redshift
 redshift!
 doppler_shift
 doppler_shift!
+```
+
+## Axis conversions
+
+Powered by [UnitfulEquivalences.jl](https://github.com/sostock/UnitfulEquivalences.jl), [`uconvert`](@ref) from [Unitful.jl](https://github.com/JuliaPhysics/Unitful.jl) is extended to convert the spectral axis between wavelength, frequency, and photon energy, along with its associated flux density:
+
+```jldoctest
+julia> using SpectrumBase, Unitful, UnitfulAstro
+
+julia> spec = spectrum([1.0, 1.5, 2.0]u"μm", [1.0, 2.0, 3.0]u"W/m^2/μm");
+
+julia> uconvert(u"THz", spec);
+
+julia> νspec = uconvert((u"THz", u"Jy"), spec);
+
+julia> issorted(spectral_axis(νspec); rev = true)
+true
+
+julia> flux_axis(νspec)[1] ≈ uconvert(u"Jy", 1.0u"W/m^2/μm" * (1.0u"μm")^2 / Unitful.c0)
+true
+```
+
+### API/Reference
+
+```@docs
+Unitful.uconvert
 ```
 
 ## Resampling

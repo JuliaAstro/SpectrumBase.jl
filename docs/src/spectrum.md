@@ -12,6 +12,7 @@ SpectrumBase.Spectrum
 SpectrumBase.SingleSpectrum
 SpectrumBase.EchelleSpectrum
 SpectrumBase.IFUSpectrum
+SpectrumBase.BinnedSpectrum
 ```
 
 ## Constructors
