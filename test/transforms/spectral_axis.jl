@@ -1,4 +1,4 @@
-using SpectrumBase: SpectralDensity, redshift
+using SpectrumBase: redshift
 
 const H_JS = 6.62607015e-34u"J*s" # Planck constant, exact by SI definition
 
@@ -66,13 +66,6 @@ end
     F_λ = [1.0, 2.0, 3.0]u"W/m^2/μm"
     spec = spectrum(wavelength, F_λ)
     c = C_MPS * u"m/s"
-
-    # Pointwise, SpectralDensity relates F_λ and F_ν at a given spectral coordinate,
-    # which may be given in any of the equivalent coordinates
-    @test uconvert(u"Jy", 1.0u"W/m^2/μm", SpectralDensity(2.0u"μm")) ≈
-        uconvert(u"Jy", 1.0u"W/m^2/μm" * (2.0u"μm")^2 / c)
-    @test uconvert(u"Jy", 1.0u"W/m^2/μm", SpectralDensity(uconvert(u"THz", c / 2.0u"μm"))) ≈
-        uconvert(u"Jy", 1.0u"W/m^2/μm", SpectralDensity(2.0u"μm"))
 
     converted = @inferred uconvert((u"THz", u"Jy"), spec)
     expected_F_ν = uconvert.(u"Jy", F_λ .* wavelength .^ 2 ./ c)

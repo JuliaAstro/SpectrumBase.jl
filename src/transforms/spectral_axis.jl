@@ -38,7 +38,7 @@ frequency) yields an axis with the opposite direction of monotonicity.
 Given a single unit, flux values are copied unchanged. Beware that a flux density then
 remains "per" its original coordinate (e.g., a per-wavelength density against a frequency
 axis). Pass a `(spectral_unit, flux_unit)` tuple, i.e., the shape returned by `unit(spec)`, to
-also convert flux density values into the matching convention via [`UnitfulEquivalences.SpectralDensity`](https://github.com/sostock/UnitfulEquivalences.jl/pull/31),
+also convert flux density values into the matching convention via [`UnitfulEquivalences.SpectralDensity`](https://github.com/sostock/UnitfulEquivalences.jl),
 which preserves integrals: ``F_ν = F_λ λ^2 / c``.
 
 # Examples

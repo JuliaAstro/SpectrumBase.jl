@@ -10,9 +10,6 @@ export SingleSpectrum, IFUSpectrum, EchelleSpectrum, BinnedSpectrum
 export SpectrumResampler, redden, redden!, deredden, deredden!
 export redshift, redshift!, doppler_shift, doppler_shift!
 
-# Unit equivalences (re-exported from UnitfulEquivalences.jl)
-export SpectralDensity
-
 # Utilities
 export blackbody #, line_flux, equivalent_width
 
