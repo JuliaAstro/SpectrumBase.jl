@@ -1,8 +1,5 @@
 import DynamicQuantities as DQ
-using SpectrumBase: redshift, redshift!, doppler_shift, doppler_shift!, blackbody
-
-const C_MPS = 299792458.0
-const C_KMPS = C_MPS / 1000
+using SpectrumBase: SingleSpectrum, BinnedSpectrum, redshift, redshift!, doppler_shift, doppler_shift!, blackbody
 
 # DynamicQuantities normalizes to SI base units, so `angstrom` and `keV` are
 # stored as their SI-base values; `DQ.ustrip` returns those base-unit numbers.
@@ -17,11 +14,16 @@ Wm2 = DQ.u"W/m^2"
         spec = spectrum(wave, flux)
         @test spec isa SingleSpectrum
 
-        # energy axis is also accepted
+        # energy and frequency axes are also accepted
         energy = collect(range(1.0, 5.0, length = 10)) .* keV
         @test spectrum(energy, flux) isa SingleSpectrum
+        freq = collect(range(1.0, 5.0, length = 10)) .* DQ.u"THz"
+        @test spectrum(freq, flux) isa SingleSpectrum
 
-        # a non-wavelength/energy axis is rejected
+        # bin edges
+        @test spectrum([1.0 2.0; 2.0 3.0] .* keV, [1.0, 2.0] .* Wm2) isa BinnedSpectrum
+
+        # a non-wavelength/frequency/energy axis is rejected
         bad = collect(range(1.0, 10.0, length = 10)) .* DQ.u"s"
         @test_throws AssertionError spectrum(bad, flux)
     end
@@ -45,6 +47,14 @@ Wm2 = DQ.u"W/m^2"
         shifted = @inferred redshift(spec, 0.5)
         @test all(spectral_axis(shifted) .≈ energy ./ 1.5)
         @test all(spectral_axis(redshift(shifted, -1 / 3)) .≈ energy)
+    end
+
+    @testset "Frequency axis compresses" begin
+        freq = collect(range(1.0, 5.0, length = 10)) .* DQ.u"THz"
+        spec = spectrum(freq, ones(10) .* Wm2)
+
+        shifted = @inferred redshift(spec, 0.5)
+        @test all(spectral_axis(shifted) .≈ freq ./ 1.5)
     end
 
     @testset "redshift in-place" begin

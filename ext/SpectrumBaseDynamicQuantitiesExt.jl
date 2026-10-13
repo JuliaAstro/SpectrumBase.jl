@@ -2,7 +2,7 @@ module SpectrumBaseDynamicQuantitiesExt
 
 using SpectrumBase
 using SpectrumBase: AbstractSpectrum, Spectrum, spectrum, spectral_axis, flux_axis, meta, blackbody
-import SpectrumBase: _ustrip, _velocity_ratio, _axis_factor
+import SpectrumBase: _ustrip, _velocity_ratio, _spectral_axis_factor
 using DynamicQuantities: DynamicQuantities, @u_str, ustrip, dimension, uexpand,
     UnionAbstractQuantity, Constants
 
@@ -12,10 +12,12 @@ using DynamicQuantities: DynamicQuantities, @u_str, ustrip, dimension, uexpand,
 # symbolic units (`us"..."`) to base `Dimensions` so the comparisons below work
 # regardless of how the axis was constructed.
 const _LENGTH_DIM = dimension(u"m")
+const _FREQUENCY_DIM = dimension(u"Hz")
 const _ENERGY_DIM = dimension(u"J")
 
 _dimension(q) = dimension(uexpand(q))
 _is_wavelength(q) = _dimension(q) == _LENGTH_DIM
+_is_frequency(q) = _dimension(q) == _FREQUENCY_DIM
 _is_energy(q) = _dimension(q) == _ENERGY_DIM
 
 # --- units-agnostic hooks from the core -------------------------------------
@@ -25,19 +27,19 @@ _ustrip(x::UnionAbstractQuantity) = ustrip(x)
 _velocity_ratio(v::UnionAbstractQuantity) = ustrip(uexpand(v / Constants.c))
 
 # Resolved from the axis value rather than the element type (see note above): a
-# wavelength axis stretches, an energy axis compresses.
-function _axis_factor(spec::AbstractSpectrum{<:UnionAbstractQuantity}, factor)
+# wavelength axis stretches, a frequency or energy axis compresses.
+function _spectral_axis_factor(spec::AbstractSpectrum{<:UnionAbstractQuantity}, factor)
     q = first(spectral_axis(spec))
     _is_wavelength(q) && return factor
-    _is_energy(q) && return inv(factor)
-    throw(ArgumentError("cannot shift a spectral axis with dimension $(_dimension(q)); expected a wavelength or energy"))
+    (_is_frequency(q) || _is_energy(q)) && return inv(factor)
+    throw(ArgumentError("cannot shift a spectral axis with dimension $(_dimension(q)); expected a wavelength, frequency, or energy"))
 end
 
 # --- spectrum constructors for DynamicQuantities axes -----------------------
 
 function _assert_spectral_dimension(axis)
     q = first(axis)
-    @assert (_is_wavelength(q) || _is_energy(q)) "spectral_axis not recognized as having dimensions of wavelength or energy."
+    @assert (_is_wavelength(q) || _is_frequency(q) || _is_energy(q)) "spectral_axis not recognized as having dimensions of wavelength, frequency, or energy."
 end
 
 function SpectrumBase.spectrum(spectral_axis::AbstractVector{<:UnionAbstractQuantity}, flux_axis::AbstractVector{<:UnionAbstractQuantity}; kwds...)
@@ -46,6 +48,11 @@ function SpectrumBase.spectrum(spectral_axis::AbstractVector{<:UnionAbstractQuan
 end
 
 function SpectrumBase.spectrum(spectral_axis::AbstractMatrix{<:UnionAbstractQuantity}, flux_axis::AbstractMatrix{<:UnionAbstractQuantity}; kwds...)
+    _assert_spectral_dimension(spectral_axis)
+    Spectrum(spectral_axis, flux_axis, Dict{Symbol, Any}(kwds))
+end
+
+function SpectrumBase.spectrum(spectral_axis::AbstractMatrix{<:UnionAbstractQuantity}, flux_axis::AbstractVector{<:UnionAbstractQuantity}; kwds...)
     _assert_spectral_dimension(spectral_axis)
     Spectrum(spectral_axis, flux_axis, Dict{Symbol, Any}(kwds))
 end

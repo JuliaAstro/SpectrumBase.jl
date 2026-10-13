@@ -13,34 +13,24 @@ function _doppler_factor(v; relativistic)
     return sqrt((1 + β) / (1 - β))
 end
 
-# Resolve the (1 + z) stretch factor to the scalar actually multiplied onto a
-# spectrum's spectral axis. A unitless axis is assumed to be a wavelength
-# (stretches). The dimension-aware behavior for `Quantity` axes (wavelength
-# stretches, energy compresses) lives in the units extensions: the Unitful
-# backend dispatches on the axis element type, while the DynamicQuantities
-# backend inspects the axis value (its dimension is not encoded in the type), so
-# both hook in through the `spec`-based method below.
-_axis_factor(::Type{<:Real}, factor) = factor
-# Dispatch on the spectral-axis element type parameter `S` (known at compile time)
-# rather than the runtime axis value, so the factor's type stays inferable. The
-# DynamicQuantities extension, whose element type does not carry its dimension,
-# instead specializes the more-specific `AbstractSpectrum{<:AbstractQuantity}`
-# method and resolves the factor from the value.
-_axis_factor(spec::AbstractSpectrum{S}, factor) where {S} = _axis_factor(S, factor)
+# Cosmological redshift
+function _redshift_factor(z)
+    z > -1 || throw(DomainError(z, "Cosmological redshift requires z > -1."))
+    return 1 + z
+end
 
-# Return a copy of `spec` whose spectral axis is scaled by `factor`. Rebuilding
-# through the constructor (rather than reassigning the field) lets the element
-# type promote, e.g., an integer axis becomes floating point, and re-runs the
-# `Spectrum` invariant checks. `R` and the type assertions recover the inference
-# that is otherwise lost through the `getproperty` overload. `R` is derived with
-# `promote_op` rather than `oneunit(S)`, since a DynamicQuantities element type
-# does not carry its dimension in the type and so has no `oneunit(::Type)`.
-function _scale_spectral_axis(spec::Spectrum{S, F, M, N}, factor) where {S, F, M, N}
-    f = _axis_factor(spec, factor)
-    R = Base.promote_op(*, S, typeof(f))
-    axis = (spectral_axis(spec) .* f)::AbstractArray{R, M}
-    flux = copy(flux_axis(spec))::AbstractArray{F, N}
-    return Spectrum(axis, flux, deepcopy(meta(spec)))
+# Resolve the (1 + z) stretch factor to the scalar actually multiplied onto a spectral axis of element type `S`.
+# Dimension-aware `Quantity` methods (wavelength stretches; frequency and energy compress) live in the units extensions.
+_spectral_axis_factor(::Type{<:Real}, factor) = factor # Unitless: assume wavelength
+# Dispatches on `S` so the factor stays inferable. The DynamicQuantities extension, whose
+# element type does not carry its dimension, specializes this on the spectrum instead.
+_spectral_axis_factor(spec::AbstractSpectrum{S}, factor) where {S} = _spectral_axis_factor(S, factor)
+
+# Rebuilding through the constructor lets the element type promote and re-runs the invariant checks.
+function _scale_spectral_axis(spec::Spectrum, factor)
+    spectral_ax = spectral_axis(spec) .* _spectral_axis_factor(spec, factor)
+    flux_ax = copy(flux_axis(spec))
+    return Spectrum(spectral_ax, flux_ax, deepcopy(meta(spec)))
 end
 
 """
@@ -48,11 +38,11 @@ end
 
 In-place version of [`redshift`](@ref).
 
-Reassigns the spectral axis, so the element type cannot change.
+Reassigns the spectral axis, so its element and array type cannot change.
 Use [`redshift`](@ref) for spectra with an integer spectral axis.
 """
 function redshift!(spec::AbstractSpectrum, z::Real)
-    spec.spectral_axis = spectral_axis(spec) .* _axis_factor(spec, 1 + z)
+    spec.spectral_axis = spectral_axis(spec) .* _spectral_axis_factor(spec, _redshift_factor(z))
     return spec
 end
 
@@ -69,6 +59,7 @@ The observed wavelength is related to the rest-frame wavelength by:
 
 where ``z`` is the cosmological redshift parameter. Only the spectral axis is transformed.
 Flux density values are not corrected for the stretching of the wavelength bins.
+For a [`BinnedSpectrum`](@ref), both bin edges are shifted and the bin values are carried unchanged.
 
 A wavelength axis is stretched by ``1 + z``. An energy axis (distinguished by its `Unitful` dimension)
 is compressed by the same factor. A unitless axis is assumed to be a wavelength.
@@ -76,7 +67,7 @@ is compressed by the same factor. A unitless axis is assumed to be a wavelength.
 # Arguments
 
 - `spec`: The input spectrum.
-- `z`: Redshift parameter. Positive values redshift (longer wavelengths),
+- `z`: Redshift parameter, must satisfy `z > -1`. Positive values redshift (longer wavelengths),
   negative values blueshift (shorter wavelengths).
 
 # Examples
@@ -92,18 +83,18 @@ true
 
 See also [`doppler_shift`](@ref) for velocity-based Doppler shifting.
 """
-redshift(spec::AbstractSpectrum, z::Real) = _scale_spectral_axis(spec, 1 + z)
+redshift(spec::AbstractSpectrum, z::Real) = _scale_spectral_axis(spec, _redshift_factor(z))
 
 """
     doppler_shift!(spec::AbstractSpectrum, v; relativistic=false)
 
 In-place version of [`doppler_shift`](@ref).
 
-Reassigns the spectral axis, so the element type cannot change. Use [`doppler_shift`](@ref)
+Reassigns the spectral axis, so its element and array type cannot change. Use [`doppler_shift`](@ref)
 for spectra with an integer spectral axis.
 """
 function doppler_shift!(spec::AbstractSpectrum, v; relativistic = false)
-    spec.spectral_axis = spectral_axis(spec) .* _axis_factor(spec, _doppler_factor(v; relativistic))
+    spec.spectral_axis = spectral_axis(spec) .* _spectral_axis_factor(spec, _doppler_factor(v; relativistic))
     return spec
 end
 
@@ -125,6 +116,7 @@ Apply a Doppler shift to a spectrum, returning a new spectrum with shifted wavel
 ```
 
 Only the spectral axis is transformed; flux density values are preserved as-is.
+For a [`BinnedSpectrum`](@ref), both bin edges are shifted and the bin values are carried unchanged.
 
 # Arguments
 

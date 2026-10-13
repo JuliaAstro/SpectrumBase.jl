@@ -37,7 +37,7 @@ spec = spectrum(wave, flux)
 plot(spec)
 ```
 
-For constructing higher dimensional spectra, e.g., for echelle or IFU spectra, see the docstrings for [EchelleSpectrum](@ref) and [IFUSpectrum](@ref), respectively.
+For constructing higher dimensional spectra, e.g., for echelle or IFU spectra, see the docstrings for [`EchelleSpectrum`](@ref) and [`IFUSpectrum`](@ref), respectively.
 
 ## Citation
 

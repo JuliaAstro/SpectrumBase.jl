@@ -67,3 +67,11 @@ end
         @test flux_axis(dereddened) ≈ flux_axis(spec)
     end
 end
+
+@testset "Binned spectra are rejected" begin
+    binned = spectrum([4000.0 4010.0; 4010.0 4020.0], [1.0, 2.0])
+    @test_throws ArgumentError redden(binned, 0.3)
+    @test_throws ArgumentError redden!(binned, 0.3)
+    @test_throws ArgumentError deredden(binned, 0.3)
+    @test_throws ArgumentError deredden!(binned, 0.3)
+end

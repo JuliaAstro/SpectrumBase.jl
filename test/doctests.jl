@@ -1,6 +1,15 @@
-using SpectrumBase
 using Documenter: DocMeta, doctest
+import DynamicQuantities
 
-DocMeta.setdocmeta!(SpectrumBase, :DocTestSetup, :(using SpectrumBase); recursive = true)
+# Docstrings defined in the units extensions belong to those modules, so doctest them too.
+const modules = [
+    SpectrumBase,
+    Base.get_extension(SpectrumBase, :SpectrumBaseUnitfulExt),
+    Base.get_extension(SpectrumBase, :SpectrumBaseDynamicQuantitiesExt),
+]
 
-doctest(SpectrumBase)
+for m in modules
+    DocMeta.setdocmeta!(m, :DocTestSetup, :(using SpectrumBase); recursive = true)
+end
+
+doctest(joinpath(pkgdir(SpectrumBase), "docs", "src"), modules)

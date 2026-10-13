@@ -1,4 +1,6 @@
-Random.seed!(8675309)
+using SpectrumBase: SingleSpectrum, BinnedSpectrum, EchelleSpectrum, IFUSpectrum
+
+const RNG = Random.seed!(8675309)
 
 @testset "Spectrum types" begin
     wave, flux = collect(1:5), 1:5
@@ -7,22 +9,25 @@ Random.seed!(8675309)
     @test_throws ArgumentError spectrum(wave, flux)
     @test_throws ArgumentError spectrum(wave[begin:end-1], flux)
 
-    wave, flux = repeat(1:5, 1, 3), rand(5, 3)
+    wave, flux = repeat(1:5, 1, 3), rand(RNG, 5, 3)
     @test spectrum(wave, flux) isa EchelleSpectrum
     wave[3, 3] = 10
     @test_throws ArgumentError spectrum(wave, flux)
     @test_throws ArgumentError spectrum(wave[begin:end-1, :], flux)
 
-    wave, flux = collect(1:5), rand(5, 4, 3)
+    wave, flux = collect(1:5), rand(RNG, 5, 4, 3)
     @test spectrum(wave, flux) isa IFUSpectrum
     wave[3] = 10
     @test_throws ArgumentError spectrum(wave, flux)
     @test_throws ArgumentError spectrum(wave[begin:end-1], flux)
+
+    wave, flux = [1 2; 2 3; 3 4; 4 5; 5 6], 1:5
+    @test spectrum(wave, flux) isa BinnedSpectrum
 end
 
 @testset "Spectrum - Single" begin
     wave = range(1e4, 5e4, length = 1000)
-    sigma = randn(size(wave))
+    sigma = randn(RNG, size(wave))
     sigma[7] = 1
     sigma[134] = 0.1
     flux = 100 .± sigma
@@ -33,9 +38,7 @@ end
     spec_indexed = spec[begin:end]
 
     @test propertynames(spec) == (:spectral_axis, :flux_axis, :meta, :name)
-    @test spectral_axis(spec) == spectral_axis(spec)
-    @test flux_axis(spec) == flux_axis(spec)
-    @test [s for s in spec] isa Vector{SingleSpectrum{Float64, Measurements.Measurement{Float64}}}
+    @test [s for s in spec] isa Vector{<:SingleSpectrum{Float64, Measurements.Measurement{Float64}}}
     @test eltype(spec) == eltype(flux_axis(spec))
     @test spectral_axis(spec) == wave
     @test spectral_axis(spec_indexed) == wave
@@ -62,12 +65,57 @@ end
     @test spec.name == "test spectrum"
 end
 
+@testset "Spectrum - Binned" begin
+    wave = [1.0 2.0; 2.0 3.0; 3.0 4.0; 4.0 5.0]
+    flux = [10.0, 20.0, 30.0, 40.0]
+
+    spec = spectrum(wave, flux, name = "test binned spectrum")
+    spec_i = spec[2]
+    spec_I = spec[2:3]
+
+    @test spec isa BinnedSpectrum
+    @test spec_i isa BinnedSpectrum
+    @test spec_I isa BinnedSpectrum
+    @test spectral_axis(spec_i) == [2.0 3.0]
+    @test flux_axis(spec_i) == [20.0]
+    @test spectral_axis(spec_I) == [2.0 3.0; 3.0 4.0]
+    @test flux_axis(spec_I) == [20.0, 30.0]
+    @test firstindex(spec) == 1
+    @test lastindex(spec) == 4
+    @test spec[firstindex(spec)] == spec[1]
+    @test spec[lastindex(spec)] == spec[4]
+
+    # Any integer index selects a single bin
+    @test spec[Int32(2)] == spec[2] == spec[2:2]
+
+    # m × 2 shape and row-order invariants
+    @test_throws ArgumentError spectrum([1.0 2.0 3.0; 2.0 3.0 4.0], [1.0, 2.0]) # not two columns
+    @test_throws ArgumentError spectrum(reshape([1.0, 2.0], 2, 1), [1.0, 2.0]) # not two columns
+    @test_throws ArgumentError spectrum([2.0 1.0; 3.0 2.0], [1.0, 2.0]) # edges swapped within rows
+    @test_throws ArgumentError spectrum([1.0 2.0; 3.0 2.5], [1.0, 2.0]) # inconsistent row order
+    @test_throws ArgumentError spectrum([1.0 1.0; 2.0 2.0], [1.0, 2.0]) # zero-width bins
+    @test spectrum([4.0 3.0; 3.0 2.0], [1.0, 2.0]) isa BinnedSpectrum # descending edges are valid
+
+    # Empty selections construct and display
+    empty_spec = spec[falses(4)]
+    @test length(empty_spec) == 0
+    @test occursin("empty", sprint(show, empty_spec))
+
+    expected = """
+    BinnedSpectrum(Float64, Float64)
+      spectral axis (4, 2): 1.0 .. 5.0
+      flux axis (4,): 10.0 .. 40.0
+      meta: Dict{Symbol, Any}(:name => "test binned spectrum")"""
+    @test sprint(show, spec) == expected
+    @test spec.name == "test binned spectrum"
+end
+
 @testset "Spectrum - Echelle" begin
     n_wavs = 1000
     n_orders = 3
     wave_1 = range(1e4, 5e4, length=n_wavs)
     wave = repeat(wave_1, 1, n_orders)
-    sigma = randn(size(wave_1))
+    sigma = randn(RNG, size(wave_1))
     sigma[7] = 1
     sigma[134] = 0.1
     flux_1 = 100 .± sigma
@@ -89,8 +137,6 @@ end
     @test propertynames(spec) == (:spectral_axis, :flux_axis, :meta, :name)
     @test propertynames(spec_i) == (:spectral_axis, :flux_axis, :meta, :Order, :name)
     @test propertynames(spec_I) == (:spectral_axis, :flux_axis, :meta, :name, :Orders)
-    @test spectral_axis(spec) == spectral_axis(spec)
-    @test flux_axis(spec) == flux_axis(spec)
     @test eltype(spec) == eltype(flux_axis(spec))
     @test spectral_axis(spec) == wave
     @test size(spec) == (n_wavs, n_orders)
@@ -116,7 +162,7 @@ end
 end
 
 @testset "Spectrum - IFU" begin
-    wave, flux = [20, 40, 120, 160, 200], rand(5, 10, 6)
+    wave, flux = [20, 40, 120, 160, 200], rand(RNG, 5, 10, 6)
 
     spec = spectrum(wave, flux, name = "test spectrum")
 
@@ -129,8 +175,6 @@ end
     @test sprint(show, spec) == expected
     @test spec.name == "test spectrum"
     @test propertynames(spec) == (:spectral_axis, :flux_axis, :meta, :name)
-    @test spectral_axis(spec) == spectral_axis(spec)
-    @test flux_axis(spec) == flux_axis(spec)
     @test eltype(spec) == eltype(flux_axis(spec))
     @test spectral_axis(spec) == wave
     @test size(spec) === (5, 10, 6)
@@ -142,7 +186,7 @@ end
 
 @testset "Unitful Spectrum - Single" begin
     wave = range(1e4, 5e4, length = 1000)
-    sigma = randn(size(wave))
+    sigma = randn(RNG, size(wave))
     sigma[7] = 1
     sigma[134] = 0.1
     flux = 100 .± sigma
@@ -155,8 +199,6 @@ end
     @test spectral_axis(spec) ≈ wave * u"angstrom"
 
     @test propertynames(spec) == (:spectral_axis, :flux_axis, :meta, :name)
-    @test spectral_axis(spec) == spectral_axis(spec)
-    @test flux_axis(spec) == flux_axis(spec)
     @test eltype(spec) == eltype(flux_axis(spec))
     @test size(spec) === (1000,)
     @test length(spec) == 1000
@@ -190,7 +232,7 @@ end
     n_orders = 3
     wave_1 = range(1e4, 5e4, length=n_wavs)
     wave = repeat(wave_1, 1, n_orders)
-    sigma = randn(size(wave_1))
+    sigma = randn(RNG, size(wave_1))
     sigma[7] = 1
     sigma[134] = 0.1
     flux_1 = 100 .± sigma
@@ -209,8 +251,6 @@ end
     @test spectral_axis(spec) ≈ wave
 
     @test propertynames(spec) == (:spectral_axis, :flux_axis, :meta, :name)
-    @test spectral_axis(spec) == spectral_axis(spec)
-    @test flux_axis(spec) == flux_axis(spec)
     @test eltype(spec) == eltype(flux_axis(spec))
     @test size(spec) === (n_wavs, n_orders)
     @test length(spec) == n_wavs * n_orders
@@ -242,7 +282,7 @@ end
 
 @testset "Arithmetic" begin
     wave = range(1e4, 5e4, length = 1000)
-    sigma = randn(size(wave))
+    sigma = randn(RNG, size(wave))
     flux = 100 .± sigma
     flux_2 = 200 .± sigma
 
@@ -253,7 +293,7 @@ end
     @test -flux_axis(spec) == -flux
 
     # Scalars / vectors
-    values = [10, randn(size(spec))]
+    values = [10, randn(RNG, size(spec))]
     for A in values
         # addition
         s = spec + A
@@ -305,7 +345,7 @@ end
     spec = spectrum(spectral_axis(spec) * u"cm", flux_axis(spec) * u"W/m^2/cm", name = "test unitfulspectrum")
 
     # Scalars / vectors
-    for A in [10u"W/m^2/cm", randn(size(spec))u"W/m^2/cm"]
+    for A in [10u"W/m^2/cm", randn(RNG, size(spec))u"W/m^2/cm"]
         # addition
         s = spec + A
         @test spectral_axis(s) == spectral_axis(spec)
@@ -317,7 +357,7 @@ end
         @test flux_axis(s) ≈ flux_axis(spec) .- A
     end
 
-    for A in [10, randn(size(spec))] 
+    for A in [10, randn(RNG, size(spec))]
         # multiplication
         s = spec * A
         @test spectral_axis(s) == spectral_axis(spec)
@@ -328,4 +368,19 @@ end
         @test spectral_axis(s) == spectral_axis(spec)
         @test flux_axis(s) ≈ flux_axis(spec) ./ 10
     end
+end
+
+@testset "Unitful Spectrum - Binned" begin
+    edges = [1.0 2.0; 2.0 3.0; 3.0 4.0]u"keV"
+    flux = [1.0, 2.0, 3.0]u"Jy"
+
+    spec = spectrum(edges, flux, name = "test xray spectrum")
+
+    @test spec isa BinnedSpectrum
+    @test unit(spec) == (u"keV", u"Jy")
+    @test spectral_axis(spec) == edges
+    @test flux_axis(spec) == flux
+    @test spec.name == "test xray spectrum"
+
+    @test_throws AssertionError spectrum([1.0 2.0; 2.0 3.0]u"kg", flux)
 end

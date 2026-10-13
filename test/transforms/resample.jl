@@ -1,8 +1,5 @@
-using SpectrumBase: SpectrumBase, AbstractSpectrum, SpectrumResampler, spectrum, spectral_axis, flux_axis
+using SpectrumBase: SpectrumResampler
 using DataInterpolations: LinearInterpolation, ExtrapolationType
-using Unitful: @u_str, uconvert
-using UnitfulAstro
-using Measurements: ±
 
 # TODO: See if it makes sense to have an exported API for resample/resample! even though we are using external interpolators.
 
@@ -36,8 +33,8 @@ end
     resampler = SpectrumResampler(spec, interp)
     expected = """
     SpectrumResampler(Float64, Measurements.Measurement{Float64})
-      spec: SpectrumBase.SingleSpectrum{Float64, Measurements.Measurement{Float64}}
-      interpolator: DataInterpolations.LinearInterpolation{Vector{Measurements.Measurement{Float64}}, StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}, Int64}, Vector{Measurements.Measurement{Float64}}, Vector{Measurements.Measurement{Float64}}, Measurements.Measurement{Float64}, FindFirstFunctions.SearchProperties{Float64}}"""
+      spec: $(typeof(spec))
+      interpolator: $(typeof(interp))"""
 
     @test sprint(show, resampler) == expected
     @test spectral_axis(resampler) == s

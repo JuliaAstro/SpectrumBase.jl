@@ -4,7 +4,7 @@ module SpectrumBase
 export AbstractSpectrum, Spectrum, spectrum, spectral_axis, flux_axis
 
 # AbstractSpectrum types
-export SingleSpectrum, IFUSpectrum, EchelleSpectrum
+export SingleSpectrum, IFUSpectrum, EchelleSpectrum, BinnedSpectrum
 
 # Transforms
 export SpectrumResampler, redden, redden!, deredden, deredden!
@@ -50,11 +50,11 @@ abstract type AbstractSpectrum{S, F} end
 
 A spectrum or spectra stored as arrays of real numbers. For UV/VIS/IR spectra, the `spectral_axis` is assumed to be wavelengths (in angstrom). For X-ray spectra, the `spectral_axis` is assumed to be energies (in keV).
 """
-mutable struct Spectrum{S<:Number, F<:Number, M, N} <: AbstractSpectrum{S, F}
-    spectral_axis::AbstractArray{S, M}
-    flux_axis::AbstractArray{F, N}
+mutable struct Spectrum{S<:Number, F<:Number, M, N, A<:AbstractArray{S, M}, B<:AbstractArray{F, N}} <: AbstractSpectrum{S, F}
+    spectral_axis::A
+    flux_axis::B
     meta::Dict{Symbol, Any}
-    function Spectrum{S, F, M, N}(s, f, meta) where {S<:Number, F<:Number, M, N}
+    function Spectrum{S, F, M, N, A, B}(s, f, meta) where {S<:Number, F<:Number, M, N, A<:AbstractArray{S, M}, B<:AbstractArray{F, N}}
         # TODO: Investigate using Holy Traits to help with validation
         # Dimension compatibility check
         if size(s, 1) != size(f, 1)
@@ -65,9 +65,7 @@ mutable struct Spectrum{S<:Number, F<:Number, M, N} <: AbstractSpectrum{S, F}
             - SingleSpectrum: spectral axis (M-length vector), flux axis (M-length vector)
             - EchelleSpectrum: spectral axis (M x N matrix), flux axis (M x N matrix)
             - IFUSpectrum: spectral axis (M-length vector), flux axis (M x N x K matrix)
-            - TODO: BinnedSpectrum (final name(s) tbd):
-                - energy (M × 2 matrix), flux (N-length vector)
-                - others?
+            - BinnedSpectrum: spectral axis (M x 2 matrix of bin edges), flux axis (M-length vector)
 
             See the documentation for each spectrum type for more.
             """))
@@ -79,12 +77,25 @@ mutable struct Spectrum{S<:Number, F<:Number, M, N} <: AbstractSpectrum{S, F}
             throw(ArgumentError("Spectral axis must be strictly increasing or decreasing."))
         end
 
-        return new{S, F, M, N}(s, f, meta)
+        # BinnedSpectrum invariants: m × 2 bin edges, each row strictly ordered in the axis direction
+        if M == 2 && N == 1
+            if size(s, 2) != 2
+                throw(ArgumentError("BinnedSpectrum spectral axis must be an m × 2 matrix of bin edges; got size $(size(s))"))
+            end
+            rows = eachrow(s)
+            ordered = all(issorted, spec_ax) ? all(r -> first(r) < last(r), rows) :
+                all(r -> first(r) > last(r), rows)
+            if !ordered
+                throw(ArgumentError("BinnedSpectrum bin edges must be strictly ordered within each row, in the direction of the spectral axis."))
+            end
+        end
+
+        return new{S, F, M, N, A, B}(s, f, meta)
     end
 end
 
 function Spectrum(s, f, meta)
-    Spectrum{eltype(s), eltype(f), ndims(s), ndims(f)}(s, f, meta)
+    Spectrum{eltype(s), eltype(f), ndims(s), ndims(f), typeof(s), typeof(f)}(s, f, meta)
 end
 
 # Doesn't seem to be used atp
@@ -111,11 +122,12 @@ Return the meta data associated with `spec`.
 """
 meta(spec::AbstractSpectrum) = spec.meta
 
+# Fields first: `hasfield` is decidable at compile time, keeping field access inferable.
 function Base.getproperty(spec::AbstractSpectrum, nm::Symbol)
-    if nm in keys(getfield(spec, :meta))
-        return getfield(spec, :meta)[nm]
-    else
+    if hasfield(typeof(spec), nm)
         return getfield(spec, nm)
+    else
+        return getfield(spec, :meta)[nm]
     end
 end
 
@@ -167,9 +179,9 @@ Base.:-(s::T, o::T) where {T <: AbstractSpectrum} = T(spectral_axis(s), flux_axi
 
 # Spectrum types and basic arithmetic
 include("spectrum_single.jl")
+include("spectrum_binned.jl")
 include("spectrum_echelle.jl")
 include("spectrum_ifu.jl")
-#include("spectrum_binned.jl")
 
 """
     spectrum(spectral_axis, flux_axis, [meta])
@@ -249,9 +261,13 @@ function spectrum(spectral_axis::AbstractMatrix{<:Real}, flux_axis::AbstractMatr
     Spectrum(spectral_axis, flux_axis, Dict{Symbol,Any}(kwds))
 end
 
+function spectrum(spectral_axis::AbstractMatrix{<:Real}, flux_axis::AbstractVector{<:Real}; kwds...)
+    Spectrum(spectral_axis, flux_axis, Dict{Symbol,Any}(kwds))
+end
+
 # `spectrum(::AbstractArray{<:Quantity}, ...)` methods, which validate that the
-# spectral axis carries wavelength or energy dimensions, live in the units
-# extensions (`ext/SpectrumBaseUnitfulExt.jl`,
+# spectral axis carries wavelength, frequency, or energy dimensions, live in the
+# units extensions (`ext/SpectrumBaseUnitfulExt.jl`,
 # `ext/SpectrumBaseDynamicQuantitiesExt.jl`).
 
 include("utils.jl")

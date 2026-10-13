@@ -1,5 +1,10 @@
 import DustExtinction
 
+# Extinction laws evaluate at a single wavelength per sample, which bin edges cannot provide.
+const _BINNED_REDDEN_MSG = "reddening is not defined for binned spectra: applying an extinction law to bin edges requires a bin-integration convention"
+redden!(::BinnedSpectrum, Av; kwargs...) = throw(ArgumentError(_BINNED_REDDEN_MSG))
+deredden!(::BinnedSpectrum, Av; kwargs...) = throw(ArgumentError(_BINNED_REDDEN_MSG))
+
 """
     redden!(::AbstractSpectrum, Av; Rv = 3.1, law = DustExtinction.CCM89)
 
