@@ -10,19 +10,23 @@ projects = ["test", "docs"]
 DustExtinction = "fb44c06c-c62f-5397-83f5-69249e0a3c8e"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Measurements = "eff96d63-e80a-5855-80a2-b1b0885c5ab7"
-PhysicalConstants = "5ad8b20f-a522-5ce9-bfc9-ddf1d5bda6ab"
 RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
-Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
-UnitfulAstro = "6112ee07-acf9-5e0f-b108-d242c714bf9f"
 UnitfulEquivalences = "da9c4bc3-91c8-4f02-8a40-6b990d2a7e0c"
+
+[weakdeps]
+DynamicQuantities = "06fc5a27-2a28-4c7c-a15d-362465fb6821"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+
+[extensions]
+SpectrumBaseDynamicQuantitiesExt = "DynamicQuantities"
+SpectrumBaseUnitfulExt = "Unitful"
 
 [compat]
 DustExtinction = ">=0.11.7"
+DynamicQuantities = "1"
 LinearAlgebra = "1.5"
 Measurements = "2"
-PhysicalConstants = "0.2"
 RecipesBase = "1"
 Unitful = "1"
-UnitfulAstro = "1"
 UnitfulEquivalences = "0.2.1"
 julia = "1.10"

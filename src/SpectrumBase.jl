@@ -18,8 +18,19 @@ export blackbody #, line_flux, equivalent_width
 
 using RecipesBase: @recipe
 using Measurements: Measurements
-using Unitful: Unitful, @u_str, ustrip, unit, dimension
-using PhysicalConstants.CODATA2018: h, c_0, k_B
+
+# Physical constants, CODATA2018 / SI-2019 exact values in SI base units. These are
+# the single source of truth for the numeric core and for both units extensions
+# (`SpectrumBaseUnitfulExt`, `SpectrumBaseDynamicQuantitiesExt`), which re-attach
+# units to these same numbers so every backend agrees to the last digit.
+const PLANCK_CONSTANT = 6.62607015e-34    # h,   J s
+const SPEED_OF_LIGHT = 2.99792458e8       # c_0, m s^-1
+const BOLTZMANN_CONSTANT = 1.380649e-23   # k_B, J K^-1
+
+# Strip units from a scalar. The unitless core is the identity; the Unitful and
+# DynamicQuantities extensions specialize this on their quantity types so that
+# plotting and other numeric consumers see plain numbers.
+_ustrip(x) = x
 
 """
     AbstractSpectrum{S <: Number, F <: Number}
@@ -155,67 +166,16 @@ Base.:-(s::AbstractSpectrum, o::AbstractSpectrum) = s - o # Satisfy Aqua
 # Multi-Spectrum
 Base.:+(s::T, o::T) where {T <: AbstractSpectrum} = T(spectral_axis(s), flux_axis(s) .+ flux_axis(o), meta(s))
 Base.:*(s::T, o::T) where {T <: AbstractSpectrum} = T(spectral_axis(s), flux_axis(s) .* flux_axis(o), meta(s))
-Base.:/(s::T, o::T) where {T <: AbstractSpectrum} = T(spectral_axis(s), flux_axis(s) ./ flux_axis(o) * unit(s)[2], meta(s))
+# Dividing two spectra cancels the flux units; multiply back a unit-valued one so
+# the ratio keeps flux units. `oneunit` is units-agnostic (it is `1` for plain
+# reals), which keeps this method in the unitless core.
+Base.:/(s::T, o::T) where {T <: AbstractSpectrum} = T(spectral_axis(s), flux_axis(s) ./ flux_axis(o) * oneunit(eltype(flux_axis(s))), meta(s))
 Base.:-(s::T, o::T) where {T <: AbstractSpectrum} = T(spectral_axis(s), flux_axis(s) .- flux_axis(o), meta(s))
 
-"""
-    Unitful.ustrip(::AbstractSpectrum)
-
-Remove the units from a spectrum. Useful for processing spectra in tools that don't play nicely with `Unitful.jl`
-
-# Examples
-```jldoctest
-julia> using Random
-
-julia> rng = Random.seed!(0)
-TaskLocalRNG()
-
-julia> using Unitful, UnitfulAstro
-
-julia> wave = range(1e4, 3e4, length=1000);
-
-julia> flux = wave .* 10 .+ randn(rng, 1000);
-
-julia> spec = spectrum(wave*u"angstrom", flux*u"W/m^2/angstrom")
-SingleSpectrum(Unitful.Quantity{Float64, 𝐋, Unitful.FreeUnits{(Å,), 𝐋, nothing}}, Unitful.Quantity{Float64, 𝐌 𝐋^-1 𝐓^-3, Unitful.FreeUnits{(Å^-1, m^-2, W), 𝐌 𝐋^-1 𝐓^-3, nothing}})
-  spectral axis (1000,): 10000.0 Å .. 30000.0 Å
-  flux axis (1000,): 99999.76809093042 W Å^-1 m^-2 .. 300000.2474309158 W Å^-1 m^-2
-  meta: Dict{Symbol, Any}()
-
-julia> ustrip(spec)
-SingleSpectrum(Float64, Float64)
-  spectral axis (1000,): 10000.0 .. 30000.0
-  flux axis (1000,): 99999.76809093042 .. 300000.2474309158
-  meta: Dict{Symbol, Any}()
-```
-"""
-Unitful.ustrip(spec::AbstractSpectrum) = spectrum(ustrip.(spectral_axis(spec)), ustrip.(flux_axis(spec)); meta(spec)...)
-
-"""
-    Unitful.unit(::AbstractSpectrum)
-
-Get the units of a spectrum. Returns a tuple of the spectral axis units and flux/sigma units
-
-# Examples
-```jldoctest
-julia> using Random
-
-julia> rng = Random.seed!(0)
-TaskLocalRNG()
-
-julia> using Unitful, UnitfulAstro
-
-julia> wave = range(1e4, 3e4, length=1000);
-
-julia> flux = wave .* 10 .+ randn(rng, 1000);
-
-julia> spec = spectrum(wave * u"angstrom", flux * u"W/m^2/angstrom");
-
-julia> w_unit, f_unit = unit(spec)
-(Å, W Å^-1 m^-2)
-```
-"""
-Unitful.unit(spec::AbstractSpectrum) = unit(eltype(spectral_axis(spec))), unit(eltype(flux_axis(spec)))
+# `ustrip(spec)` and `unit(spec)` (and the DynamicQuantities `dimension(spec)`
+# analog) live in the units extensions, since they extend functions owned by the
+# respective units package. See `ext/SpectrumBaseUnitfulExt.jl` and
+# `ext/SpectrumBaseDynamicQuantitiesExt.jl`.
 
 # Spectrum types and basic arithmetic
 include("spectrum_single.jl")
@@ -305,23 +265,10 @@ function spectrum(spectral_axis::AbstractMatrix{<:Real}, flux_axis::AbstractVect
     Spectrum(spectral_axis, flux_axis, Dict{Symbol,Any}(kwds))
 end
 
-# Recognized spectral-axis dimensions: wavelength, frequency, photon energy.
-const SPECTRAL_DIMENSIONS = (u"𝐋", u"𝐓^-1", u"𝐋^2 * 𝐌 * 𝐓^-2")
-
-function spectrum(spectral_axis::AbstractVector{<:Unitful.Quantity}, flux_axis::AbstractVector{<:Unitful.Quantity}; kwds...)
-    @assert dimension(eltype(spectral_axis)) ∈ SPECTRAL_DIMENSIONS "spectral_axis not recognized as having dimensions of wavelength, frequency, or energy."
-    Spectrum(spectral_axis, flux_axis, Dict{Symbol,Any}(kwds))
-end
-
-function spectrum(spectral_axis::AbstractMatrix{<:Unitful.Quantity}, flux_axis::AbstractMatrix{<:Unitful.Quantity}; kwds...)
-    @assert dimension(eltype(spectral_axis)) ∈ SPECTRAL_DIMENSIONS "spectral_axis not recognized as having dimensions of wavelength, frequency, or energy."
-    Spectrum(spectral_axis, flux_axis, Dict{Symbol,Any}(kwds))
-end
-
-function spectrum(spectral_axis::AbstractMatrix{<:Unitful.Quantity}, flux_axis::AbstractVector{<:Unitful.Quantity}; kwds...)
-    @assert dimension(eltype(spectral_axis)) ∈ SPECTRAL_DIMENSIONS "spectral_axis not recognized as having dimensions of wavelength, frequency, or energy."
-    Spectrum(spectral_axis, flux_axis, Dict{Symbol,Any}(kwds))
-end
+# `spectrum(::AbstractArray{<:Quantity}, ...)` methods, which validate that the
+# spectral axis carries wavelength, frequency, or energy dimensions, live in the
+# units extensions (`ext/SpectrumBaseUnitfulExt.jl`,
+# `ext/SpectrumBaseDynamicQuantitiesExt.jl`).
 
 include("utils.jl")
 include("transforms/resampler.jl")

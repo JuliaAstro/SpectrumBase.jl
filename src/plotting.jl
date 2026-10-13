@@ -3,7 +3,7 @@
     xlabel --> "wave"
     ylabel --> "flux density"
     label --> ""
-    ustrip.(spectral_axis(spec)), Measurements.value.(ustrip.(flux_axis(spec)))
+    _ustrip.(spectral_axis(spec)), Measurements.value.(_ustrip.(flux_axis(spec)))
 end
 
 @recipe function f(spec::EchelleSpectrum)

@@ -10,7 +10,10 @@ Create a blackbody spectrum using Planck's law. The curve follows the mathematic
 
 If `wave` and `T` are not `Unitful.Quantity`, they are assumed to be in angstrom and Kelvin, and the returned flux will be in units `W m^-2 Å^-1`.
 
-The physical constants are calculated using [PhysicalConstants.jl](https://github.com/juliaphysics/physicalconstants.jl), specifically the CODATA2018 measurement set.
+The physical constants are the CODATA2018 / SI-2019 exact values.
+
+When `wave` and `T` are `Unitful` or `DynamicQuantities` quantities, the corresponding
+units extension handles the calculation and the flux carries the appropriate units.
 
 # References
 
@@ -33,7 +36,7 @@ SingleSpectrum(Unitful.Quantity{Float64, 𝐋, Unitful.FreeUnits{(μm,), 𝐋, n
 julia> blackbody(ustrip.(u"angstrom", wave), 6000)
 SingleSpectrum(Float64, Float64)
   spectral axis (100,): 10000.0 .. 30000.0
-  flux axis (100,): 1190.9562575755397 .. 40.04325690910415
+  flux axis (100,): 1190.9562575755401 .. 40.043256909104144
   meta: Dict{Symbol, Any}(:T => 6000, :name => "Blackbody")
 
 julia> spectral_axis(bb)[argmax(bb)]
@@ -43,25 +46,21 @@ julia> 2898u"μm*K" / bb.T # See if it matches up with Wien's law
 1.449 μm
 ```
 """
-function blackbody(wave::AbstractVector{<:Unitful.Quantity}, T::Unitful.Quantity)
-    out_unit = u"W/m^2" / unit(eltype(wave))
-    flux = _blackbody(wave, T) .|> out_unit
-    return spectrum(wave, flux, name = "Blackbody", T = T)
-end
-
 function blackbody(wave::AbstractVector{<:Real}, T::Real)
-    flux = ustrip.(u"W/m^2/angstrom", _blackbody(wave * u"angstrom", T * u"K"))
+    flux = _planck_per_angstrom.(wave, T)
     return spectrum(wave, flux, name = "Blackbody", T = T)
 end
 
-_blackbody(wave::AbstractVector{<:Unitful.Quantity}, T::Unitful.Quantity) = blackbody(T).(wave)
-
-"""
-    blackbody(T::Unitful.Quantity)
-
-Returns a function for calculating blackbody curves.
-"""
-blackbody(T::Unitful.Quantity) = w->2h * c_0^2 / w^5 / (exp(h * c_0 / (w * k_B * T)) - 1)
+# Planck's law Bλ(T) for wavelength `λ` in angstrom and temperature `T` in Kelvin,
+# returned in W m^-2 Å^-1. Uses the SI constants defined in `SpectrumBase`; the
+# unit-aware `blackbody` methods (Unitful/DynamicQuantities `Quantity` arguments)
+# live in the units extensions.
+function _planck_per_angstrom(λ, T)
+    λ_m = λ * 1e-10  # angstrom -> m
+    spectral_radiance = 2 * PLANCK_CONSTANT * SPEED_OF_LIGHT^2 / λ_m^5 /
+        expm1(PLANCK_CONSTANT * SPEED_OF_LIGHT / (λ_m * BOLTZMANN_CONSTANT * T))
+    return spectral_radiance * 1e-10  # W m^-2 m^-1 -> W m^-2 Å^-1
+end
 
 #"""
 #    equivalent_width(::AbstractSpectrum)

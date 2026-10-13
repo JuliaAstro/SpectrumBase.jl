@@ -84,7 +84,7 @@ doppler_shift!
 
 ## Axis conversions
 
-Powered by [UnitfulEquivalences.jl](https://github.com/sostock/UnitfulEquivalences.jl), [`uconvert`](@ref) from [Unitful.jl](https://github.com/JuliaPhysics/Unitful.jl) is extended to convert the spectral axis between wavelength, frequency, and photon energy, along with its associated flux density:
+Powered by [UnitfulEquivalences.jl](https://github.com/sostock/UnitfulEquivalences.jl), [`uconvert`](@ref Unitful.uconvert) from [Unitful.jl](https://github.com/JuliaPhysics/Unitful.jl) is extended to convert the spectral axis between wavelength, frequency, and photon energy, along with its associated flux density:
 
 ```jldoctest
 julia> using SpectrumBase, Unitful, UnitfulAstro

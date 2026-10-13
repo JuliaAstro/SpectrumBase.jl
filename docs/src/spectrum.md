@@ -60,9 +60,23 @@ SpectrumBase.meta(::AbstractSpectrum)
 
 ## Unitful helpers
 
+Loading [Unitful.jl](https://github.com/PainterQubits/Unitful.jl) activates an
+extension that lets spectra carry units and adds the following helpers.
+
 ```@docs
 Unitful.unit
 Unitful.ustrip
+```
+
+## DynamicQuantities helpers
+
+Loading [DynamicQuantities.jl](https://github.com/SymbolicML/DynamicQuantities.jl)
+activates an analogous extension. Since DynamicQuantities has no unit objects,
+the `unit` helper is replaced by a `dimension` one.
+
+```@docs
+DynamicQuantities.ustrip
+DynamicQuantities.dimension
 ```
 
 ## Utilities

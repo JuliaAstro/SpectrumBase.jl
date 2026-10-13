@@ -1,7 +1,9 @@
 # Dimensionless velocity β ≡ v / c against the speed of light in vacuum.
-# A plain number is taken as km/s, the usual unit for radial velocities.
-_velocity_ratio(v::Unitful.Quantity) = ustrip(Unitful.NoUnits, v / c_0)
-_velocity_ratio(v::Real) = _velocity_ratio(v * u"km/s")
+# A plain number is taken as km/s, the usual unit for radial velocities; the
+# `Quantity` methods (which honor the velocity's own units) live in the units
+# extensions.
+const _SPEED_OF_LIGHT_KMPS = SPEED_OF_LIGHT / 1000
+_velocity_ratio(v::Real) = v / _SPEED_OF_LIGHT_KMPS
 
 # Doppler shift
 function _doppler_factor(v; relativistic)
@@ -18,17 +20,15 @@ function _redshift_factor(z)
 end
 
 # Resolve the (1 + z) stretch factor to the scalar actually multiplied onto a spectral axis of element type `S`.
+# Dimension-aware `Quantity` methods (wavelength stretches; frequency and energy compress) live in the units extensions.
 _spectral_axis_factor(::Type{<:Real}, factor) = factor # Unitless: assume wavelength
-_spectral_axis_factor(::Type{<:Unitful.Length}, factor) = factor # Wavelength: stretches
-_spectral_axis_factor(::Type{<:Unitful.Frequency}, factor) = inv(factor) # Frequency: compresses
-_spectral_axis_factor(::Type{<:Unitful.Energy}, factor) = inv(factor) # Energy: compresses
-_spectral_axis_factor(::Type{S}, factor) where {S <: Unitful.Quantity} =
-    throw(ArgumentError("cannot shift a spectral axis with dimension $(dimension(S)); expected a wavelength, frequency, or energy"))
-_spectral_axis_factor(spec::AbstractSpectrum, factor) = _spectral_axis_factor(eltype(spectral_axis(spec)), factor)
+# Dispatches on `S` so the factor stays inferable. The DynamicQuantities extension, whose
+# element type does not carry its dimension, specializes this on the spectrum instead.
+_spectral_axis_factor(spec::AbstractSpectrum{S}, factor) where {S} = _spectral_axis_factor(S, factor)
 
 # Rebuilding through the constructor lets the element type promote and re-runs the invariant checks.
-function _scale_spectral_axis(spec::Spectrum{S}, factor) where {S}
-    spectral_ax = spectral_axis(spec) .* _spectral_axis_factor(S, factor)
+function _scale_spectral_axis(spec::Spectrum, factor)
+    spectral_ax = spectral_axis(spec) .* _spectral_axis_factor(spec, factor)
     flux_ax = copy(flux_axis(spec))
     return Spectrum(spectral_ax, flux_ax, deepcopy(meta(spec)))
 end

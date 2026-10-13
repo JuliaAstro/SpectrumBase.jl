@@ -1,7 +1,13 @@
 using Documenter
 using SpectrumBase
 using Unitful
+using DynamicQuantities
 using Measurements
+
+# The Unitful and DynamicQuantities integrations live in package extensions, so
+# their docstrings must be pulled from those modules explicitly.
+const unitful_ext = Base.get_extension(SpectrumBase, :SpectrumBaseUnitfulExt)
+const dynamicquantities_ext = Base.get_extension(SpectrumBase, :SpectrumBaseDynamicQuantitiesExt)
 
 makedocs(sitename = "SpectrumBase.jl",
     format = Documenter.HTML(;
@@ -10,7 +16,7 @@ makedocs(sitename = "SpectrumBase.jl",
     ),
     authors = "Miles Lucas and contributors.",
     linkcheck = !("skiplinks" in ARGS),
-    modules = [SpectrumBase],
+    modules = [SpectrumBase, unitful_ext, dynamicquantities_ext],
     pages = [
         "Home" => "index.md",
         "spectrum.md",
